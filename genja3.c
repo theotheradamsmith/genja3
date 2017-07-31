@@ -129,14 +129,15 @@ int cf_asprintf_cat(char **old_string, char *fmt, ...) {
 
 	return(len);
 }
-unsigned int SSL_BYTE_OFFSET(unsigned char *p)
-	{
+
+static unsigned int SSL_BYTE_OFFSET(unsigned char *p) {
 	return((*p)+1);
-	}
-unsigned int SSL_WORD_OFFSET(unsigned char *p)
-	{
+}
+
+static unsigned int SSL_WORD_OFFSET(unsigned char *p) {
 	return(((*p) << 8)+(*(p+1))+2);
-	}
+}
+
 static unsigned int two_byte_hex_to_dec(unsigned char *p) {
 	return (unsigned int)((*p) << 8) + (*(p+1));
 }
@@ -312,10 +313,6 @@ static char *generate_ja3_hash(const u_char *input) {
 		cf_asprintf_cat(&buffer, "%s", ecpf);
 	free (ecpf);
 
-	if (DEBUG_JA3) {
-		printf("DEBUG BUF: %s\n", buffer);
-	}
-
 	// Generate an md5 checksum
 	unsigned char md5digest[MD5_DIGEST_LENGTH];
 
@@ -326,7 +323,7 @@ static char *generate_ja3_hash(const u_char *input) {
 		sprintf(readable_md5digest+(i*2), "%02hhx", md5digest[i]);
 
 	if (DEBUG_JA3) {
-		printf("DEBUG JA3: %s\n", readable_md5digest);
+		printf("JA3: %s --> %s", buffer, readable_md5digest);
 	}
 
 	free(buffer);
@@ -410,8 +407,12 @@ void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *header, 
 
 	switch (payload[5]) {
 		case TLS_CLIENT_HELLO:
-			printf("ClientHello %s ", ssl_version(hello_version));
-			generate_ja3_hash(payload);
+			if (DEBUG) {
+				printf("ClientHello %s ", ssl_version(hello_version));
+			}
+			printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
+			char *hash = generate_ja3_hash(payload);
+			free(hash);
 			printf("\n");
 			break;
 		case TLS_SERVER_HELLO:
