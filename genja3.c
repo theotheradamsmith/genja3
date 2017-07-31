@@ -13,7 +13,7 @@
 #include <openssl/md5.h>
 #include <sys/socket.h>
 
-#define DEBUG 0
+#define DEBUG     0
 #define DEBUG_JA3 1
 
 // Ethernet headers are always exactly 14 bytes
@@ -44,7 +44,7 @@ struct sniff_ip {
 };
 
 #define IP_HL(ip) (((ip)->ip_vhl) & 0x0f)
-#define IP_V(ip) (((ip)->ip_vhl) >> 4)
+#define IP_V(ip)  (((ip)->ip_vhl) >> 4)
 
 // TCP header
 typedef u_int tcp_seq;
@@ -57,14 +57,14 @@ struct sniff_tcp {
 	u_char th_offx2;
 #define TH_OFF(th) (((th)->th_offx2 & 0xf0) >> 4)
 	u_char th_flags;
-	#define TH_FIN 0x01
-	#define TH_SYN 0x02
-	#define TH_RST 0x04
+	#define TH_FIN  0x01
+	#define TH_SYN  0x02
+	#define TH_RST  0x04
 	#define TH_PUSH 0x08
-	#define TH_ACK 0x10
-	#define TH_URG 0x20
-	#define TH_ECE 0x40
-	#define TH_CWR 0x80
+	#define TH_ACK  0x10
+	#define TH_URG  0x20
+	#define TH_ECE  0x40
+	#define TH_CWR  0x80
 	#define TH_FLAGS (TH_FIN|TH_SYN|TH_RST|TH_ACK|TH_URG|TH_ECE|TH_CWR)
 	u_short th_win;
 	u_short th_sum;
@@ -96,6 +96,7 @@ char *ssl_version(u_short version) {
 		case 0x303:
 			return "TLSv1.2";
 	}
+
 	snprintf(hex, sizeof(hex), "0x%04hx", version);
 	return hex;
 }
@@ -127,15 +128,15 @@ int cf_asprintf_cat(char **old_string, char *fmt, ...) {
 		*old_string = new_string;
 	}
 
-	return(len);
+	return len;
 }
 
 static unsigned int SSL_BYTE_OFFSET(unsigned char *p) {
-	return((*p)+1);
+	return ((*p)+1);
 }
 
 static unsigned int SSL_WORD_OFFSET(unsigned char *p) {
-	return(((*p) << 8)+(*(p+1))+2);
+	return (((*p) << 8)+(*(p+1))+2);
 }
 
 static unsigned int two_byte_hex_to_dec(unsigned char *p) {
@@ -166,6 +167,13 @@ static bool is_in_grease_table(unsigned int n) {
 	}
 }
 
+/**
+ * generate_ja3_hash operates on a ClientHello to generate an MD5 checksum of certain
+ * fields in the stream as specified by the project at https://github.com/salesforce/ja3
+ *
+ * @param input the packet buffer containing the ClientHello data
+ * @return Returns a strdup'd copy of the generated JA3 hash. This must be freed by the caller.
+ */
 static char *generate_ja3_hash(const u_char *input) {
 	unsigned char *ptr = (unsigned char *)input;
 
@@ -331,7 +339,8 @@ static char *generate_ja3_hash(const u_char *input) {
 	return strdup(readable_md5digest);
 }
 
-void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *header, const struct sniff_ip *ip, int size_ip) {
+static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *header,
+						const struct sniff_ip *ip, int size_ip) {
 	const struct sniff_tcp *tcp;
 	int size_tcp;
 
@@ -390,7 +399,7 @@ void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *header, 
 		return;
 	}
 
-	// skip session ID
+	// Skip session ID
 	const u_char *cipher_data = &payload[OFFSET_SESSION_LENGTH];
 	if (DEBUG && cipher_data[0] != 0) {
 		printf("SID[%hhu] ", cipher_data[0]);
@@ -429,7 +438,8 @@ void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *header, 
 	}
 }
 
-void process_packet(const unsigned char *packet, const struct pcap_pkthdr *header, struct timeval ts, unsigned int capture_len) {
+void process_packet(const unsigned char *packet, const struct pcap_pkthdr *header,
+					struct timeval ts, unsigned int capture_len) {
 	const struct sniff_ethernet *ethernet;
 	const struct sniff_ip *ip;
 
@@ -502,3 +512,4 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
+
