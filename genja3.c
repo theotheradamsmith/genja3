@@ -399,21 +399,6 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 		return;
 	}
 
-	// Skip session ID
-	const unsigned char *cipher_data = &payload[OFFSET_SESSION_LENGTH];
-	if (DEBUG && cipher_data[0] != 0) {
-		printf("SID[%hhu] ", cipher_data[0]);
-	}
-
-	if (size_payload < OFFSET_SESSION_LENGTH + cipher_data[0] + 3) {
-		if (DEBUG) {
-			printf("SessionID too long: %hhu bytes\n", cipher_data[0]);
-		}
-		return;
-	}
-
-	cipher_data += 1 + cipher_data[0];
-
 	switch (payload[5]) {
 		case TLS_CLIENT_HELLO:
 			if (DEBUG) {
