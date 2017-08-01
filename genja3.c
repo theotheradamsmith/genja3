@@ -53,7 +53,7 @@ struct sniff_ip {
 #define IP_V(ip)  (((ip)->ip_vhl) >> 4)
 
 // TCP header
-typedef u_int tcp_seq;
+typedef unsigned int tcp_seq;
 
 struct sniff_tcp {
 	unsigned short th_sport;
