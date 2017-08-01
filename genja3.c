@@ -16,6 +16,12 @@
 #define DEBUG     0
 #define DEBUG_JA3 1
 
+/**
+ * The pcap processing and tcp parsing code has been rather shamelessly adapted(copied) from
+ * ge0rg's work at https://github.com/ge0rg/tls-hello-dump. That is, itself, an adaptation of
+ * Tim Carstens's "sniffer.c"
+ */
+
 // Ethernet headers are always exactly 14 bytes
 #define SIZE_ETHERNET 14
 
@@ -82,7 +88,7 @@ struct sniff_tcp {
 #define OFFSET_SESSION_LENGTH 43
 #define OFFSET_CIPHER_LIST    44
 
-char *ssl_version(unsigned short version) {
+static char *ssl_version(unsigned short version) {
 	static char hex[7];
 	switch (version) {
 		case 0x002:
@@ -101,7 +107,12 @@ char *ssl_version(unsigned short version) {
 	return hex;
 }
 
-int cf_asprintf_cat(char **old_string, char *fmt, ...) {
+/**
+ * A Cipafilter library function by David Hinkle... it takes either NULL or a string
+ * and handles memory reallocation when increasing the size of a string with formatted
+ * input.
+ */
+static int cf_asprintf_cat(char **old_string, char *fmt, ...) {
 	va_list args;
 	int len;
 
@@ -131,18 +142,22 @@ int cf_asprintf_cat(char **old_string, char *fmt, ...) {
 	return len;
 }
 
+/// Ridiculous functions that are in place because my code is intended to work inside Cipafilter
 static unsigned int SSL_BYTE_OFFSET(unsigned char *p) {
 	return ((*p)+1);
 }
 
+/// Ridiculous functions that are in place because my code is intended to work inside Cipafilter
 static unsigned int SSL_WORD_OFFSET(unsigned char *p) {
 	return (((*p) << 8)+(*(p+1))+2);
 }
 
+/// Converts a two octet hex to base 10
 static unsigned int two_byte_hex_to_dec(unsigned char *p) {
 	return (unsigned int)((*p) << 8) + (*(p+1));
 }
 
+/// Function to determine if given input n is a GREASE value
 static bool is_in_grease_table(unsigned int n) {
 	switch (n) {
 		case 0x0a0a:
@@ -168,7 +183,7 @@ static bool is_in_grease_table(unsigned int n) {
 }
 
 /**
- * generate_ja3_hash operates on a ClientHello to generate an MD5 checksum of certain
+ * Generate_ja3_hash operates on a ClientHello to generate an MD5 checksum of certain
  * fields in the stream as specified by the project at https://github.com/salesforce/ja3
  *
  * @param input the packet buffer containing the ClientHello data
@@ -339,6 +354,7 @@ static char *generate_ja3_hash(const unsigned char *input) {
 	return strdup(readable_md5digest);
 }
 
+// I stole this.
 static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *header,
 						const struct sniff_ip *ip, int size_ip) {
 	const struct sniff_tcp *tcp;
@@ -423,6 +439,7 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 	}
 }
 
+// I stole this.
 void process_packet(const unsigned char *packet, const struct pcap_pkthdr *header,
 					struct timeval ts, unsigned int capture_len) {
 	const struct sniff_ethernet *ethernet;
