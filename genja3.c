@@ -21,25 +21,25 @@
 
 // Ethernet header
 struct sniff_ethernet {
-	u_char ether_dhost[ETHER_ADDR_LEN];
-	u_char ether_shost[ETHER_ADDR_LEN];
-	u_short ether_type;
+	unsigned char ether_dhost[ETHER_ADDR_LEN];
+	unsigned char ether_shost[ETHER_ADDR_LEN];
+	unsigned short ether_type;
 };
 
 // IP
 struct sniff_ip {
-	u_char ip_vhl;
-	u_char ip_tos;
-	u_short ip_len;
-	ushort ip_id;
-	u_short ip_off;
+	unsigned char ip_vhl;
+	unsigned char ip_tos;
+	unsigned short ip_len;
+	unsigned short ip_id;
+	unsigned short ip_off;
 	#define IP_RF 0x8000
 	#define IP_DF 0x4000
 	#define IP_MF 0x2000
 	#define IP_OFFMASK 0x1fff
-	u_char ip_ttl;
-	u_char ip_p;
-	u_short ip_sum;
+	unsigned char ip_ttl;
+	unsigned char ip_p;
+	unsigned short ip_sum;
 	struct in_addr ip_src, ip_dst;
 };
 
@@ -50,13 +50,13 @@ struct sniff_ip {
 typedef u_int tcp_seq;
 
 struct sniff_tcp {
-	u_short th_sport;
-	u_short th_dport;
+	unsigned short th_sport;
+	unsigned short th_dport;
 	tcp_seq th_seq;
 	tcp_seq th_ack;
-	u_char th_offx2;
+	unsigned char th_offx2;
 #define TH_OFF(th) (((th)->th_offx2 & 0xf0) >> 4)
-	u_char th_flags;
+	unsigned char th_flags;
 	#define TH_FIN  0x01
 	#define TH_SYN  0x02
 	#define TH_RST  0x04
@@ -66,9 +66,9 @@ struct sniff_tcp {
 	#define TH_ECE  0x40
 	#define TH_CWR  0x80
 	#define TH_FLAGS (TH_FIN|TH_SYN|TH_RST|TH_ACK|TH_URG|TH_ECE|TH_CWR)
-	u_short th_win;
-	u_short th_sum;
-	u_short th_urp;
+	unsigned short th_win;
+	unsigned short th_sum;
+	unsigned short th_urp;
 };
 
 #define SSL_MIN_GOOD_VERSION 0x002
@@ -82,7 +82,7 @@ struct sniff_tcp {
 #define OFFSET_SESSION_LENGTH 43
 #define OFFSET_CIPHER_LIST    44
 
-char *ssl_version(u_short version) {
+char *ssl_version(unsigned short version) {
 	static char hex[7];
 	switch (version) {
 		case 0x002:
@@ -174,7 +174,7 @@ static bool is_in_grease_table(unsigned int n) {
  * @param input the packet buffer containing the ClientHello data
  * @return Returns a strdup'd copy of the generated JA3 hash. This must be freed by the caller.
  */
-static char *generate_ja3_hash(const u_char *input) {
+static char *generate_ja3_hash(const unsigned char *input) {
 	unsigned char *ptr = (unsigned char *)input;
 
 	unsigned char *max = ptr + SSL_WORD_OFFSET(ptr+3) + 3;
@@ -376,7 +376,7 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 	}
 
 	// define/compute tcp payload (segment) offset
-	const u_char *payload = (u_char *)(packet + SIZE_ETHERNET + size_ip + size_tcp);
+	const unsigned char *payload = (unsigned char *)(packet + SIZE_ETHERNET + size_ip + size_tcp);
 
 	if (payload[0] != TLS_HANDSHAKE) {
 		if (DEBUG) {
@@ -385,11 +385,11 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 		return;
 	}
 
-	u_short proto_version = payload[1]*256 + payload[2];
+	unsigned short proto_version = payload[1]*256 + payload[2];
 	if (DEBUG) {
 		printf("%s ", ssl_version(proto_version));
 	}
-	u_short hello_version = payload[OFFSET_HELLO_VERSION]*256 + payload[OFFSET_HELLO_VERSION+1];
+	unsigned short hello_version = payload[OFFSET_HELLO_VERSION]*256 + payload[OFFSET_HELLO_VERSION+1];
 
 	if (proto_version < SSL_MIN_GOOD_VERSION || proto_version >= SSL_MAX_GOOD_VERSION ||
 		hello_version < SSL_MIN_GOOD_VERSION || hello_version >= SSL_MAX_GOOD_VERSION) {
@@ -400,7 +400,7 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 	}
 
 	// Skip session ID
-	const u_char *cipher_data = &payload[OFFSET_SESSION_LENGTH];
+	const unsigned char *cipher_data = &payload[OFFSET_SESSION_LENGTH];
 	if (DEBUG && cipher_data[0] != 0) {
 		printf("SID[%hhu] ", cipher_data[0]);
 	}
