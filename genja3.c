@@ -7,14 +7,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <arpa/inet.h>
 #include <netinet/if_ether.h>
 #include <openssl/md5.h>
 #include <sys/socket.h>
 
+// Debugging parameters... except DEBUG_JA3 is currently the mechanism printing the hash data
 #define DEBUG     0
 #define DEBUG_JA3 1
+
+// Globals to indicate running mode
+static bool print_dst = true;
+static bool print_src = false;
+static bool print_sni = false;
 
 /**
  * The pcap processing and tcp parsing code has been rather shamelessly adapted(copied) from
@@ -182,14 +189,48 @@ static bool is_in_grease_table(unsigned int n) {
 	}
 }
 
+// Receives SNI extension starting just after the extension id field (i.e., at the length field)
+static char *parse_sni(const unsigned char *ptr) {
+	char *ret_buffer = NULL;
+
+	unsigned int total_extension_len = two_byte_hex_to_dec((unsigned char *)ptr);
+	unsigned int len_traversed = 0;
+	ptr += 2;
+	len_traversed += 2;
+
+	//unsigned int server_name_list_len = two_byte_hex_to_dec((unsigned char *)ptr);
+	ptr += 2;
+	len_traversed += 2;
+
+	while (len_traversed < total_extension_len) {
+		//unsigned int server_name_type = *ptr;
+		ptr += 1;
+		len_traversed += 1;
+
+		unsigned int server_name_len = two_byte_hex_to_dec((unsigned char *)ptr);
+		ptr += 2;
+		len_traversed += 2;
+
+		for (int i = 0; i < server_name_len; i++) {
+			cf_asprintf_cat(&ret_buffer, "%c", ptr[i]);
+		}
+
+		ptr += server_name_len;
+		len_traversed += server_name_len;
+	}
+
+	return ret_buffer;
+}
+
 /**
  * Generate_ja3_hash operates on a ClientHello to generate an MD5 checksum of certain
  * fields in the stream as specified by the project at https://github.com/salesforce/ja3
  *
- * @param input the packet buffer containing the ClientHello data
+ * @param input The packet buffer containing the ClientHello data
+ * @param sni If we are in SNI capture mode, fill this buffer with SNI data
  * @return Returns a strdup'd copy of the generated JA3 hash. This must be freed by the caller.
  */
-static char *generate_ja3_hash(const unsigned char *input) {
+static char *generate_ja3_hash(const unsigned char *input, char **sni_buffer) {
 	unsigned char *ptr = (unsigned char *)input;
 
 	unsigned char *max = ptr + SSL_WORD_OFFSET(ptr+3) + 3;
@@ -278,7 +319,10 @@ static char *generate_ja3_hash(const unsigned char *input) {
 			ptr += 2;
 			extensions_bytes_added += 2;
 
-			if (extension_id == 0x0a) {
+			// Special case extension processing
+			if (extension_id == 0x0000 && print_sni) {
+				*sni_buffer = parse_sni(ptr-2); // let's go back in time to catch the sni total len
+			} else if (extension_id == 0x000a) {
 				// Skip 2 octets for the supported groups list length (yeah, 2 len fields)
 				unsigned char *tmp = ptr+2;
 				int num_data_points = (data_suite_len - 4) / 2;
@@ -294,7 +338,7 @@ static char *generate_ja3_hash(const unsigned char *input) {
 						ec_count++;
 					}
 				}
-			} else if (extension_id == 0x0b) {
+			} else if (extension_id == 0x000b) {
 				// Elliptic curve point format types contain one-byte data fields
 				unsigned char *tmp = ptr+1; // Skip 1 octet for the ecpf len (yeah, 2 len fields)
 				int num_data_points = (data_suite_len - 3);
@@ -420,9 +464,19 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 			if (DEBUG) {
 				printf("ClientHello %s ", ssl_version(hello_version));
 			}
-			printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
-			char *hash = generate_ja3_hash(payload);
+			if (print_dst) {
+				printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
+			}
+			if (print_src) {
+				printf("[%s %hu] ", inet_ntoa(ip->ip_src), ntohs(tcp->th_sport));
+			}
+			char *sni_buffer = NULL;
+			char *hash = generate_ja3_hash(payload, &sni_buffer);
+			if (print_sni) {
+				printf(" [%s]", sni_buffer ? sni_buffer : "-");
+			}
 			free(hash);
+			free(sni_buffer);
 			printf("\n");
 			break;
 		case TLS_SERVER_HELLO:
@@ -442,12 +496,9 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 // I stole this.
 void process_packet(const unsigned char *packet, const struct pcap_pkthdr *header,
 					struct timeval ts, unsigned int capture_len) {
-	const struct sniff_ethernet *ethernet;
 	const struct sniff_ip *ip;
 
 	int size_ip;
-
-	ethernet = (struct sniff_ethernet *)packet;
 
 	// define/compute ip header offset
 	ip = (struct sniff_ip *)(packet + SIZE_ETHERNET);
@@ -491,20 +542,57 @@ void process_packet(const unsigned char *packet, const struct pcap_pkthdr *heade
 
 }
 
+void print_usage(char *bin_name) {
+	fprintf(stderr, "Usage: %s <options> <pcap file>\n\n", bin_name);
+	fprintf(stderr, "Options:\n");
+	fprintf(stderr, "    -h             Print this message and exit\n");
+	fprintf(stderr, "    -s             Enable 'print source' mode, which prints source ip and\n"
+                    "                   source port, rather than destination ip and port\n");
+	fprintf(stderr, "    -S             Append SNI data if available\n");
+	fprintf(stderr, "\n");
+}
+
 int main(int argc, char *argv[]) {
+	char *bin_name = argv[0];
 	pcap_t *pcap;
+	char *filename = NULL;
 	const unsigned char *packet;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct pcap_pkthdr header;
 
-	if (argc != 2) {
-		fprintf(stderr, "Requires one argument: the trace file to parse");
+	int c;
+	while ((c = getopt(argc, argv, "hsS")) != -1) {
+		switch (c) {
+			case 'h':
+				print_usage(bin_name);
+				return 0;
+			case 's':
+				print_src = true;
+				print_dst = false;
+				break;
+			case 'S':
+				print_sni = true;
+				break;
+			default:
+				print_usage(bin_name);
+				return 1;
+		}
 	}
 
-	pcap = pcap_open_offline(argv[1], errbuf);
-	if (!pcap) {
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 1) {
+		fprintf(stderr, "You must specify a filename to parse\n");
+		print_usage(bin_name);
+		return 1;
+	}
+
+	assert((filename = argv[0]));
+
+	if (!(pcap = pcap_open_offline(filename, errbuf))) {
 		fprintf(stderr, "Error reading pcap file: %s\n", errbuf);
-		exit(1);
+		return 1;
 	}
 
 	// Loop through extracting packets as long as we have any to read
@@ -513,5 +601,5 @@ int main(int argc, char *argv[]) {
 	}
 
 	return 0;
-}
 
+}
