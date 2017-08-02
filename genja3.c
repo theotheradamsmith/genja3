@@ -110,7 +110,6 @@ static char *ssl_version(unsigned short version) {
 	return hex;
 }
 
-
 // I stole this.
 static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *header,
 						const struct sniff_ip *ip, int size_ip) {
@@ -252,7 +251,6 @@ void process_packet(const unsigned char *packet, const struct pcap_pkthdr *heade
 				printf("Protocol: unknown\n");
 			return;
 	}
-
 }
 
 void print_usage(char *bin_name) {
@@ -326,5 +324,5 @@ int main(int argc, char *argv[]) {
 	}
 
 	return 0;
-
 }
+

@@ -214,3 +214,4 @@ char *generate_ja3_hash(const unsigned char *input, char **sni_buffer) {
 
 	return strdup(readable_md5digest);
 }
+
