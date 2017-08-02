@@ -14,12 +14,12 @@
 #include <openssl/md5.h>
 #include <sys/socket.h>
 
-// Debugging parameters... except DEBUG_JA3 is currently the mechanism printing the hash data
 #define DEBUG     0
-#define DEBUG_JA3 1
 
 // Globals to indicate running mode
+static bool print_ja3 = true;
 static bool print_dst = true;
+static bool force_dst = false;
 static bool print_src = false;
 static bool print_sni = false;
 
@@ -393,7 +393,7 @@ static char *generate_ja3_hash(const unsigned char *input, char **sni_buffer) {
 	for (int i = 0; i < MD5_DIGEST_LENGTH; i++)
 		sprintf(readable_md5digest+(i*2), "%02hhx", md5digest[i]);
 
-	if (DEBUG_JA3) {
+	if (print_ja3) {
 		printf("JA3: %s --> %s", buffer, readable_md5digest);
 	}
 
@@ -468,11 +468,11 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 			if (DEBUG) {
 				printf("ClientHello %s ", ssl_version(hello_version));
 			}
-			if (print_dst) {
-				printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
-			}
-			if (print_src) {
+			if (print_src) { // the lack of a colon here was a specific request from Coop
 				printf("[%s %hu] ", inet_ntoa(ip->ip_src), ntohs(tcp->th_sport));
+			}
+			if (print_dst || force_dst) { // colon for direct compatability with Salesforce' ja3
+				printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
 			}
 			char *sni_buffer = NULL;
 			char *hash = generate_ja3_hash(payload, &sni_buffer);
@@ -551,7 +551,9 @@ void print_usage(char *bin_name) {
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "    -c             Enable 'print client' mode, which prints source ip and\n"
                     "                   source port, rather than destination ip and port\n");
+	fprintf(stderr, "    -e             Exclude JA3 buffer & hash output\n");
 	fprintf(stderr, "    -h             Print this message and exit\n");
+	fprintf(stderr, "    -s             Force the printing of server ip and port\n");
 	fprintf(stderr, "    -S             Append SNI data if available\n");
 	fprintf(stderr, "\n");
 }
@@ -565,14 +567,20 @@ int main(int argc, char *argv[]) {
 	struct pcap_pkthdr header;
 
 	int c;
-	while ((c = getopt(argc, argv, "hcS")) != -1) {
+	while ((c = getopt(argc, argv, "cehsS")) != -1) {
 		switch (c) {
-			case 'h':
-				print_usage(bin_name);
-				return 0;
 			case 'c':
 				print_src = true;
 				print_dst = false;
+				break;
+			case 'e':
+				print_ja3 = false;
+				break;
+			case 'h':
+				print_usage(bin_name);
+				return 0;
+			case 's':
+				force_dst = true;
 				break;
 			case 'S':
 				print_sni = true;
