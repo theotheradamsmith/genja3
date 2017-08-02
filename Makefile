@@ -1,12 +1,16 @@
-CC=gcc
-LDFLAGS=-lpcap -lssl -lcrypto
-CFLAGS=-Wall -std=c11 -g -O2
+BIN = genja3
 
-all: $(OBJ)
-	$(CC) $(CFLAGS) -o genja3 genja3.c $(LDFLAGS)
+CC = gcc
+CFLAGS = -Wall -std=c11 -g -O2
+LIBS = -lpcap -lssl -lcrypto
+SRC = genja3.c
 
-.PHONY: clean
+all: $(BIN)
+
+genja3: $(SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
 clean:
 	rm -rf genja3
 
+.PHONY: clean
