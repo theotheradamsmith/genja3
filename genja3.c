@@ -549,9 +549,9 @@ void process_packet(const unsigned char *packet, const struct pcap_pkthdr *heade
 void print_usage(char *bin_name) {
 	fprintf(stderr, "Usage: %s <options> <pcap file>\n\n", bin_name);
 	fprintf(stderr, "Options:\n");
-	fprintf(stderr, "    -h             Print this message and exit\n");
-	fprintf(stderr, "    -s             Enable 'print source' mode, which prints source ip and\n"
+	fprintf(stderr, "    -c             Enable 'print client' mode, which prints source ip and\n"
                     "                   source port, rather than destination ip and port\n");
+	fprintf(stderr, "    -h             Print this message and exit\n");
 	fprintf(stderr, "    -S             Append SNI data if available\n");
 	fprintf(stderr, "\n");
 }
@@ -565,12 +565,12 @@ int main(int argc, char *argv[]) {
 	struct pcap_pkthdr header;
 
 	int c;
-	while ((c = getopt(argc, argv, "hsS")) != -1) {
+	while ((c = getopt(argc, argv, "hcS")) != -1) {
 		switch (c) {
 			case 'h':
 				print_usage(bin_name);
 				return 0;
-			case 's':
+			case 'c':
 				print_src = true;
 				print_dst = false;
 				break;
