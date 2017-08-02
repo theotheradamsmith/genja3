@@ -198,7 +198,7 @@ static char *parse_sni(const unsigned char *ptr) {
 	ptr += 2;
 	len_traversed += 2;
 
-	//unsigned int server_name_list_len = two_byte_hex_to_dec((unsigned char *)ptr);
+	unsigned int server_name_list_len = two_byte_hex_to_dec((unsigned char *)ptr);
 	ptr += 2;
 	len_traversed += 2;
 
@@ -217,6 +217,10 @@ static char *parse_sni(const unsigned char *ptr) {
 
 		ptr += server_name_len;
 		len_traversed += server_name_len;
+
+		if (3 + server_name_len < server_name_list_len) {
+			cf_asprintf_cat(&ret_buffer, ", ");
+		}
 	}
 
 	return ret_buffer;
