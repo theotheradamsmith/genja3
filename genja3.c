@@ -16,12 +16,17 @@
 
 #define DEBUG     0
 
-// Globals to indicate running mode
-static bool print_ja3 = true;
-static bool print_dst = true;
-static bool force_dst = false;
-static bool print_src = false;
-static bool print_sni = false;
+static uint32_t options = 0;
+
+#define PRINT_JA3 1
+#define PRINT_DST 2
+#define FORCE_DST 4
+#define PRINT_SRC 8
+#define PRINT_SNI 16
+
+#define OF_ON(oflag) ((!(options & oflag)) ? (options ^= oflag) : (options))
+#define OF_OFF(oflag) ((options & oflag) ? (options ^= oflag) : options)
+#define OF(oflag) (options & oflag)
 
 /**
  * The pcap processing and tcp parsing code has been rather shamelessly adapted(copied) from
@@ -324,7 +329,7 @@ static char *generate_ja3_hash(const unsigned char *input, char **sni_buffer) {
 			extensions_bytes_added += 2;
 
 			// Special case extension processing
-			if (extension_id == 0x0000 && print_sni) {
+			if (extension_id == 0x0000 && OF(PRINT_SNI)) {
 				*sni_buffer = parse_sni(ptr-2); // let's go back in time to catch the sni total len
 			} else if (extension_id == 0x000a) {
 				// Skip 2 octets for the supported groups list length (yeah, 2 len fields)
@@ -393,7 +398,7 @@ static char *generate_ja3_hash(const unsigned char *input, char **sni_buffer) {
 	for (int i = 0; i < MD5_DIGEST_LENGTH; i++)
 		sprintf(readable_md5digest+(i*2), "%02hhx", md5digest[i]);
 
-	if (print_ja3) {
+	if (OF(PRINT_JA3)) {
 		printf("JA3: %s --> %s", buffer, readable_md5digest);
 	}
 
@@ -468,15 +473,15 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 			if (DEBUG) {
 				printf("ClientHello %s ", ssl_version(hello_version));
 			}
-			if (print_src) { // the lack of a colon here was a specific request from Coop
+			if (OF(PRINT_SRC)) { // the lack of a colon here was a specific request from Coop
 				printf("[%s %hu] ", inet_ntoa(ip->ip_src), ntohs(tcp->th_sport));
 			}
-			if (print_dst || force_dst) { // colon for direct compatability with Salesforce' ja3
+			if (OF(PRINT_DST) || OF(FORCE_DST)) { // colon for direct compatability with Salesforce' ja3
 				printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
 			}
 			char *sni_buffer = NULL;
 			char *hash = generate_ja3_hash(payload, &sni_buffer);
-			if (print_sni) {
+			if (OF(PRINT_SNI)) {
 				printf(" [%s]", sni_buffer ? sni_buffer : "-");
 			}
 			free(hash);
@@ -566,24 +571,28 @@ int main(int argc, char *argv[]) {
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct pcap_pkthdr header;
 
+	// Enable default options, which are designed to output lines that can be diffed against
+	// the Salesforce JA3 python script
+	options |= (PRINT_JA3 | PRINT_DST);
+
 	int c;
 	while ((c = getopt(argc, argv, "cehsS")) != -1) {
 		switch (c) {
 			case 'c':
-				print_src = true;
-				print_dst = false;
+				OF_ON(PRINT_SRC);
+				OF_OFF(PRINT_DST);
 				break;
 			case 'e':
-				print_ja3 = false;
+				OF_OFF(PRINT_JA3);
 				break;
 			case 'h':
 				print_usage(bin_name);
 				return 0;
 			case 's':
-				force_dst = true;
+				OF_ON(FORCE_DST);
 				break;
 			case 'S':
-				print_sni = true;
+				OF_ON(PRINT_SNI);
 				break;
 			default:
 				print_usage(bin_name);
