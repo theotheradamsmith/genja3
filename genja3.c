@@ -19,6 +19,7 @@ uint32_t options = 0;
 void print_usage(char *bin_name) {
 	fprintf(stderr, "Usage: %s <options> <pcap file>\n\n", bin_name);
 	fprintf(stderr, "Options:\n");
+	fprintf(stderr, "    -A             Append application layer protocol data if available\n");
 	fprintf(stderr, "    -c             Enable 'print client' mode, which prints source ip and\n"
                     "                   source port, rather than destination ip and port\n");
 	fprintf(stderr, "    -e             Exclude JA3 buffer & hash output\n");
@@ -41,8 +42,11 @@ int main(int argc, char *argv[]) {
 	options |= (PRINT_JA3 | PRINT_DST);
 
 	int c;
-	while ((c = getopt(argc, argv, "cehsS")) != -1) {
+	while ((c = getopt(argc, argv, "AcehsS")) != -1) {
 		switch (c) {
+			case 'A':
+				OF_ON(PRINT_ALP);
+				break;
 			case 'c':
 				OF_ON(PRINT_SRC);
 				OF_OFF(PRINT_DST);

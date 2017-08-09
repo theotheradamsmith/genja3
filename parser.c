@@ -11,6 +11,38 @@
 #include "parser.h"
 #include "util.h"
 
+char *parse_alp(const unsigned char *ptr) {
+	char *ret_buffer = NULL;
+
+	unsigned int total_extension_len = two_byte_hex_to_dec((unsigned char *)ptr);
+	unsigned int len_traversed = 0;
+	ptr += 2;
+	len_traversed += 2;
+
+	// unsigned int alp_extension_len = two_byte_hex_to_dec((unsigned char *)ptr);
+	ptr += 2;
+	len_traversed += 2;
+
+	while (len_traversed < total_extension_len) {
+		unsigned int current_str_len = *ptr;
+		ptr += 1;
+		len_traversed += 1;
+
+		for (int i = 0; i < current_str_len; i++) {
+			cf_asprintf_cat(&ret_buffer, "%c", ptr[i]);
+		}
+
+		ptr += current_str_len;
+		len_traversed += current_str_len;
+
+		if (len_traversed < total_extension_len) {
+			cf_asprintf_cat(&ret_buffer, ", ");
+		}
+	}
+
+	return ret_buffer;
+}
+
 char *parse_sni(const unsigned char *ptr) {
 	char *ret_buffer = NULL;
 
@@ -19,12 +51,13 @@ char *parse_sni(const unsigned char *ptr) {
 	ptr += 2;
 	len_traversed += 2;
 
-	unsigned int server_name_list_len = two_byte_hex_to_dec((unsigned char *)ptr);
+	// unsigned int server_name_list_len = two_byte_hex_to_dec((unsigned char *)ptr);
 	ptr += 2;
 	len_traversed += 2;
 
 	while (len_traversed < total_extension_len) {
-		//unsigned int server_name_type = *ptr;
+		// unsigned int server_name_type = *ptr;
+		// skip over server name type
 		ptr += 1;
 		len_traversed += 1;
 
@@ -39,7 +72,7 @@ char *parse_sni(const unsigned char *ptr) {
 		ptr += server_name_len;
 		len_traversed += server_name_len;
 
-		if (3 + server_name_len < server_name_list_len) {
+		if (len_traversed < total_extension_len) {
 			cf_asprintf_cat(&ret_buffer, ", ");
 		}
 	}
@@ -47,7 +80,7 @@ char *parse_sni(const unsigned char *ptr) {
 	return ret_buffer;
 }
 
-char *generate_ja3_hash(const unsigned char *input, char **sni_buffer) {
+char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **alp_buffer) {
 	unsigned char *ptr = (unsigned char *)input;
 
 	unsigned char *max = ptr + SSL_WORD_OFFSET(ptr+3) + 3;
@@ -139,7 +172,9 @@ char *generate_ja3_hash(const unsigned char *input, char **sni_buffer) {
 			// Special case extension processing
 			if (extension_id == 0x0000 && OF(PRINT_SNI)) {
 				*sni_buffer = parse_sni(ptr-2); // let's go back in time to catch the sni total len
-			} else if (extension_id == 0x000a) {
+			} else if (extension_id == 0x0010 && OF(PRINT_ALP)) {
+				*alp_buffer = parse_alp(ptr-2); // going back in time to catch alp total len
+			}else if (extension_id == 0x000a) {
 				// Skip 2 octets for the supported groups list length (yeah, 2 len fields)
 				unsigned char *tmp = ptr+2;
 				int num_data_points = (data_suite_len - 4) / 2;

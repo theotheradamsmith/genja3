@@ -106,9 +106,13 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 				printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
 			}
 			char *sni_buffer = NULL;
-			char *hash = generate_ja3_hash(payload, &sni_buffer);
+			char *alp_buffer = NULL;
+			char *hash = generate_ja3_hash(payload, &sni_buffer, &alp_buffer);
 			if (OF(PRINT_SNI)) {
 				printf(" [%s]", sni_buffer ? sni_buffer : "-");
+			}
+			if (OF(PRINT_ALP)) {
+				printf(" [%s]", alp_buffer ? alp_buffer : "-");
 			}
 			free(hash);
 			free(sni_buffer);
