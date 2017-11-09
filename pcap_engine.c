@@ -117,7 +117,10 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 			}
 			if (OF(PRINT_RAW)) {
 				printf(" [%s]", raw_buffer ? raw_buffer : "-");
+			} else if (OF(CREATE_BYTE_ARRAY)) {
+				printf(" {%s}", raw_buffer ? raw_buffer : "-");
 			}
+
 			free(hash);
 			free(sni_buffer);
 			free(raw_buffer);

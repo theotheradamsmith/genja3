@@ -237,14 +237,24 @@ static void process_extensions(const unsigned char *input, const unsigned char *
 static void fetch_raw_hex_bytestream(const unsigned char *input, char **raw_handshake) {
 	unsigned char *ptr = (unsigned char *)input;
 
+	char *raw = NULL;
+	int raw_len = 0;
 	const unsigned int client_hello_length = ((*(ptr+6))<<16)+((*(ptr+7))<<8)+(*(ptr+8));
-	char *raw = calloc(1, (2*(client_hello_length+9))+1);
-
-	for (int i = 0; i < client_hello_length+9; i++) {
-		sprintf(raw+(i*2), "%02hhx", ptr[i]);
+	if (OF(CREATE_BYTE_ARRAY)) {
+		raw_len = 6 * (client_hello_length + 9);
+		raw = calloc(1, raw_len+1);
+		for (int i = 0; i < client_hello_length+9; i++) {
+			sprintf(raw+(i*6), "0x%02hhx, ", ptr[i]);
+		}
+	} else {
+		raw_len = 2 * (client_hello_length + 9);
+		raw = calloc(1, raw_len+1);
+		for (int i = 0; i < client_hello_length+9; i++) {
+			sprintf(raw+(i*2), "%02hhx", ptr[i]);
+		}
 	}
 
-	raw[2*(client_hello_length+9)] = '\0';
+	raw[raw_len] = '\0';
 	*raw_handshake = raw;
 }
 
