@@ -10,6 +10,7 @@ extern uint32_t options;
 #define PRINT_SRC 8
 #define PRINT_SNI 16
 #define PRINT_ALP 32
+#define PRINT_RAW 64
 
 #define OF_ON(oflag) ((!(options & oflag)) ? (options ^= oflag) : (options))
 #define OF_OFF(oflag) ((options & oflag) ? (options ^= oflag) : options)

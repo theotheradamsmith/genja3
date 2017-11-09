@@ -24,6 +24,7 @@ void print_usage(char *bin_name) {
                     "                   source port, rather than destination ip and port\n");
 	fprintf(stderr, "    -e             Exclude JA3 buffer & hash output\n");
 	fprintf(stderr, "    -h             Print this message and exit\n");
+	fprintf(stderr, "    -r             Print the raw hex bytestream of the handshake\n");
 	fprintf(stderr, "    -s             Force the printing of server ip and port\n");
 	fprintf(stderr, "    -S             Append SNI data if available\n");
 	fprintf(stderr, "\n");
@@ -42,7 +43,7 @@ int main(int argc, char *argv[]) {
 	options |= (PRINT_JA3 | PRINT_DST);
 
 	int c;
-	while ((c = getopt(argc, argv, "AcehsS")) != -1) {
+	while ((c = getopt(argc, argv, "AcehrsS")) != -1) {
 		switch (c) {
 			case 'A':
 				OF_ON(PRINT_ALP);
@@ -57,6 +58,9 @@ int main(int argc, char *argv[]) {
 			case 'h':
 				print_usage(bin_name);
 				return 0;
+			case 'r':
+				OF_ON(PRINT_RAW);
+				break;
 			case 's':
 				OF_ON(FORCE_DST);
 				break;

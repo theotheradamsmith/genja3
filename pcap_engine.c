@@ -107,15 +107,20 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 			}
 			char *sni_buffer = NULL;
 			char *alp_buffer = NULL;
-			char *hash = generate_ja3_hash(payload, &sni_buffer, &alp_buffer);
+			char *raw_buffer = NULL;
+			char *hash = generate_ja3_hash(payload, &sni_buffer, &alp_buffer, &raw_buffer);
 			if (OF(PRINT_SNI)) {
 				printf(" [%s]", sni_buffer ? sni_buffer : "-");
 			}
 			if (OF(PRINT_ALP)) {
 				printf(" [%s]", alp_buffer ? alp_buffer : "-");
 			}
+			if (OF(PRINT_RAW)) {
+				printf(" [%s]", raw_buffer ? raw_buffer : "-");
+			}
 			free(hash);
 			free(sni_buffer);
+			free(raw_buffer);
 			printf("\n");
 			break;
 		case TLS_SERVER_HELLO:

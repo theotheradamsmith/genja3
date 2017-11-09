@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -233,10 +234,28 @@ static void process_extensions(const unsigned char *input, const unsigned char *
 	free (ecpf);
 }
 
-static char *generate_hashable_buffer(const unsigned char *input, char **sni_buffer,
-									  char **alp_buffer) {
-	char *buffer = NULL;
+static void fetch_raw_hex_bytestream(const unsigned char *input, char **raw_handshake) {
+	unsigned char *ptr = (unsigned char *)input;
 
+	const unsigned int client_hello_length = ((*(ptr+6))<<16)+((*(ptr+7))<<8)+(*(ptr+8));
+	char *raw = calloc(1, (2*(client_hello_length+9))+1);
+
+	for (int i = 0; i < client_hello_length+9; i++) {
+		sprintf(raw+(i*2), "%02hhx", ptr[i]);
+	}
+
+	raw[2*(client_hello_length+9)] = '\0';
+	*raw_handshake = raw;
+}
+
+static char *generate_hashable_buffer(const unsigned char *input, char **sni_buffer,
+									  char **alp_buffer, char **raw_handshake) {
+	// Ain't nobody got time for that what ain't client hello handshakes
+	assert(input && input[0] == 0x16 && input[1] == 0x03 && input[2] <= 0x03 && input[5] == 0x01);
+
+	fetch_raw_hex_bytestream(input, raw_handshake);
+
+	char *buffer = NULL;
 	unsigned char *ptr = (unsigned char *)input;
 	unsigned char *max = ptr + SSL_WORD_OFFSET(ptr+3) + 3;
 
@@ -276,8 +295,9 @@ static char *generate_hashable_buffer(const unsigned char *input, char **sni_buf
 	return buffer;
 }
 
-char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **alp_buffer) {
-	char *buffer = generate_hashable_buffer(input, sni_buffer, alp_buffer);
+char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **alp_buffer,
+						char **raw_handshake) {
+	char *buffer = generate_hashable_buffer(input, sni_buffer, alp_buffer, raw_handshake);
 
 	if (!buffer) {
 		return NULL;
