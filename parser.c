@@ -80,24 +80,8 @@ char *parse_sni(const unsigned char *ptr) {
 	return ret_buffer;
 }
 
-char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **alp_buffer) {
+static int process_ciphers(const unsigned char *input, char **buffer) {
 	unsigned char *ptr = (unsigned char *)input;
-
-	unsigned char *max = ptr + SSL_WORD_OFFSET(ptr+3) + 3;
-	char *buffer = NULL;
-
-	// Version information is at indices 9 & 10
-	ptr += 9;
-	cf_asprintf_cat(&buffer, "%u,", two_byte_hex_to_dec(ptr));
-
-	// Skip random fields & Session ID fields
-	ptr += 34;
-	ptr += SSL_BYTE_OFFSET(ptr);
-
-	if (ptr+2 > max)
-		return NULL;
-
-	// Ciphers
 	unsigned int cipher_suite_len = SSL_WORD_OFFSET(ptr);
 	unsigned int num_ciphers = (cipher_suite_len - 2) / 2;
 	int ciphers_added = 0;
@@ -107,24 +91,21 @@ char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **al
 			unsigned int cipher = two_byte_hex_to_dec(tmp+(2*cs_id));
 			if (!is_in_grease_table(cipher)) {
 				if (ciphers_added == 0) {
-					cf_asprintf_cat(&buffer, "%u", cipher);
+					cf_asprintf_cat(buffer, "%u", cipher);
 				} else {
-					cf_asprintf_cat(&buffer, "-%u", cipher);
+					cf_asprintf_cat(buffer, "-%u", cipher);
 				}
 				ciphers_added++;
 			}
 		}
 	}
 
-	// We put a comma between every JA3 component
-	cf_asprintf_cat(&buffer, "%s", ",");
+	return cipher_suite_len;
+}
 
-	ptr += cipher_suite_len;
-	if (ptr + 1 > max)
-		return NULL;
-
-	ptr += SSL_BYTE_OFFSET(ptr); // Skip the compression method
-
+static void process_extensions(const unsigned char *input, const unsigned char *max,
+							   char **sni_buffer, char **alp_buffer, char **buffer) {
+	unsigned char *ptr = (unsigned char *)input;
 	// Buffer to hold extensions
 	char *e = NULL;
 	int extension_count = 0;
@@ -135,49 +116,61 @@ char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **al
 	char *ecpf = NULL;
 	int ecpf_count = 0;
 
-	// Checking for extensions
-	if (ptr != max) {
-		// Process extensions
-		unsigned int extensions_suite_len = SSL_WORD_OFFSET(ptr);
+	// Process extensions
+	unsigned int extensions_suite_len = SSL_WORD_OFFSET(ptr);
 
-		ptr += 2; // Skip extensions length fields
+	ptr += 2; // Skip extensions length fields
 
-		unsigned int extensions_bytes_added = 0;
+	unsigned int extensions_bytes_added = 0;
 
-		while (extensions_bytes_added < extensions_suite_len - 2 && ptr != max) {
-			unsigned int extension_id = two_byte_hex_to_dec(ptr);
+	while (extensions_bytes_added < extensions_suite_len - 2 && ptr != max) {
+		unsigned int extension_id = two_byte_hex_to_dec(ptr);
 
-			// First, add the extension to the extensions buffer if it's not on the grease table
-			if (!is_in_grease_table(extension_id)) {
-				if (extension_count == 0) {
-					cf_asprintf_cat(&e, "%u", extension_id);
-				} else {
-					cf_asprintf_cat(&e, "-%u", extension_id);
-				}
-				extension_count++;
+		// First, add the extension to the extensions buffer if it's not on the grease table
+		if (!is_in_grease_table(extension_id)) {
+			if (extension_count == 0) {
+				cf_asprintf_cat(&e, "%u", extension_id);
+			} else {
+				cf_asprintf_cat(&e, "-%u", extension_id);
 			}
+			extension_count++;
+		}
 
-			// Advance the pointer from the id fields to the length fields
-			ptr += 2;
-			extensions_bytes_added += 2;
+		// Advance the pointer from the id fields to the length fields
+		ptr += 2;
+		extensions_bytes_added += 2;
 
-			// Second, check the extension to see if it contains either elliptic curve or elliptic
-			// curve point format data; add the data fields to their respective buffers
-			unsigned int data_suite_len = SSL_WORD_OFFSET(ptr);
+		// Second, check the extension to see if it contains either elliptic curve or elliptic
+		// curve point format data; add the data fields to their respective buffers
+		unsigned int data_suite_len = SSL_WORD_OFFSET(ptr);
 
-			// Advance ptr to actual data (individual data suites also contain an additional len)
-			ptr += 2;
-			extensions_bytes_added += 2;
+		// Advance ptr to actual data (individual data suites also contain an additional len)
+		ptr += 2;
+		extensions_bytes_added += 2;
 
-			// Special case extension processing
-			if (extension_id == 0x0000 && OF(PRINT_SNI)) {
-				*sni_buffer = parse_sni(ptr-2); // let's go back in time to catch the sni total len
-			} else if (extension_id == 0x0010 && OF(PRINT_ALP)) {
-				*alp_buffer = parse_alp(ptr-2); // going back in time to catch alp total len
-			}else if (extension_id == 0x000a) {
+		unsigned char *tmp;
+		int num_data_points;
+
+		// Special case extension processing
+		switch (extension_id) {
+			case 0x0000:
+				if (OF(PRINT_SNI)) {
+					*sni_buffer = parse_sni(ptr-2); // go back to catch the sni total len
+				}
+
+				break;
+
+			case 0x0010:
+				if (OF(PRINT_SNI)) {
+					*alp_buffer = parse_alp(ptr-2); // going back to catch alp total len
+				}
+
+				break;
+
+			case 0x000a:
 				// Skip 2 octets for the supported groups list length (yeah, 2 len fields)
-				unsigned char *tmp = ptr+2;
-				int num_data_points = (data_suite_len - 4) / 2;
+				tmp = ptr+2;
+				num_data_points = (data_suite_len - 4) / 2;
 
 				for (int i = 0; i < num_data_points; i++) {
 					unsigned int val = two_byte_hex_to_dec(tmp+(2*i));
@@ -190,10 +183,13 @@ char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **al
 						ec_count++;
 					}
 				}
-			} else if (extension_id == 0x000b) {
+
+				break;
+
+			case 0x000b:
 				// Elliptic curve point format types contain one-byte data fields
-				unsigned char *tmp = ptr+1; // Skip 1 octet for the ecpf len (yeah, 2 len fields)
-				int num_data_points = (data_suite_len - 3);
+				tmp = ptr+1; // Skip 1 octet for the ecpf len (2 len fields)
+				num_data_points = (data_suite_len - 3);
 
 				for (int i = 0; i < num_data_points; i++) {
 					unsigned int val = *(tmp+i);
@@ -206,31 +202,86 @@ char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **al
 						ecpf_count++;
 					}
 				}
-			}
 
-			// Advance up to the next extension
-			extensions_bytes_added += data_suite_len - 2;
-			ptr += data_suite_len - 2;
+				break;
+
+			default:
+				break;
 		}
+
+		// Advance up to the next extension
+		extensions_bytes_added += data_suite_len - 2;
+		ptr += data_suite_len - 2;
 	}
 
 	// We now have everything to complete our main JA3 buffer and calculate our MD5 sum
 	if (extension_count)
-		cf_asprintf_cat(&buffer, "%s", e);
+		cf_asprintf_cat(buffer, "%s", e);
 	free (e);
 
 	// We put a comma between every JA3 component
-	cf_asprintf_cat(&buffer, "%s", ",");
+	cf_asprintf_cat(buffer, "%s", ",");
 
 	if (ec_count)
-		cf_asprintf_cat(&buffer, "%s", ec);
+		cf_asprintf_cat(buffer, "%s", ec);
 	free (ec);
 
-	cf_asprintf_cat(&buffer, "%s", ",");
+	cf_asprintf_cat(buffer, "%s", ",");
 
 	if (ecpf_count)
-		cf_asprintf_cat(&buffer, "%s", ecpf);
+		cf_asprintf_cat(buffer, "%s", ecpf);
 	free (ecpf);
+}
+
+static char *generate_hashable_buffer(const unsigned char *input, char **sni_buffer,
+									  char **alp_buffer) {
+	char *buffer = NULL;
+
+	unsigned char *ptr = (unsigned char *)input;
+	unsigned char *max = ptr + SSL_WORD_OFFSET(ptr+3) + 3;
+
+	// Version information is at indices 9 & 10
+	ptr += 9;
+	cf_asprintf_cat(&buffer, "%u,", two_byte_hex_to_dec(ptr));
+
+	// Skip random fields & Session ID fields
+	ptr += 34;
+	ptr += SSL_BYTE_OFFSET(ptr);
+
+	if (ptr+2 > max) {
+		free(buffer);
+		return NULL;
+	}
+
+	// Ciphers
+	unsigned int cipher_suite_len = process_ciphers(ptr, &buffer);
+
+	ptr += cipher_suite_len;
+	if (ptr + 1 > max) {
+		free(buffer);
+		return NULL;
+	}
+
+	// We put a comma between every JA3 component
+	// @todo: verify that ja3 library always puts a comma here; pretty sure it does...
+	cf_asprintf_cat(&buffer, "%s", ",");
+
+	ptr += SSL_BYTE_OFFSET(ptr); // Skip the compression method
+
+	// Checking for extensions
+	if (ptr != max) {
+		process_extensions(ptr, max, sni_buffer, alp_buffer, &buffer);
+	}
+
+	return buffer;
+}
+
+char *generate_ja3_hash(const unsigned char *input, char **sni_buffer, char **alp_buffer) {
+	char *buffer = generate_hashable_buffer(input, sni_buffer, alp_buffer);
+
+	if (!buffer) {
+		return NULL;
+	}
 
 	// Generate an md5 checksum
 	unsigned char md5digest[MD5_DIGEST_LENGTH];
