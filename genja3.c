@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "genja3.h"
+#include "ja3_hashmap.h"
 #include "parser.h"
 #include "pcap_engine.h"
 #include "util.h"
@@ -23,6 +24,11 @@ void print_usage(char *bin_name) {
 	fprintf(stderr, "    -c             Enable 'print client' mode, which prints source ip and\n"
                     "                   source port, rather than destination ip and port\n");
 	fprintf(stderr, "    -e             Exclude JA3 buffer & hash output\n");
+	fprintf(stderr, "    -f             Perform fingerprint classification for each handshake;\n"
+                    "                   this option requires an argument, namely, a JSON file\n"
+                    "                   containing at least the keys 'desc' and 'ja3_hash'...\n"
+                    "                   more than one fingerprint can be contained in the file,\n"
+                    "                   but each must be separated by a newline char\n");
 	fprintf(stderr, "    -h             Print this message and exit\n");
 	fprintf(stderr, "    -r             Print the raw hex bytestream of the handshake\n");
 	fprintf(stderr, "    -R             Print the hex bytestream {0x16}-style of the handshake\n");
@@ -34,7 +40,8 @@ void print_usage(char *bin_name) {
 int main(int argc, char *argv[]) {
 	char *bin_name = argv[0];
 	pcap_t *pcap;
-	char *filename = NULL;
+	const char *pcap_file = NULL;
+	const char *fingerprint_file = NULL;
 	const unsigned char *packet;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct pcap_pkthdr header;
@@ -44,7 +51,7 @@ int main(int argc, char *argv[]) {
 	options |= (PRINT_JA3 | PRINT_DST);
 
 	int c;
-	while ((c = getopt(argc, argv, "AcehrRsS")) != -1) {
+	while ((c = getopt(argc, argv, "Acef:hrRsS")) != -1) {
 		switch (c) {
 			case 'A':
 				OF_ON(PRINT_ALP);
@@ -55,6 +62,10 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'e':
 				OF_OFF(PRINT_JA3);
+				break;
+			case 'f':
+				fingerprint_file = optarg;
+				OF_ON(FINGERPRINT_CLASS);
 				break;
 			case 'h':
 				print_usage(bin_name);
@@ -71,6 +82,11 @@ int main(int argc, char *argv[]) {
 			case 'S':
 				OF_ON(PRINT_SNI);
 				break;
+			case '?':
+				if (optopt == 'f') {
+					fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+				}
+				// fall through to default
 			default:
 				print_usage(bin_name);
 				return 1;
@@ -86,17 +102,26 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	assert((filename = argv[0]));
+	pcap_file = argv[0];
+	assert(pcap_file);
 
-	if (!(pcap = pcap_open_offline(filename, errbuf))) {
+	if (!(pcap = pcap_open_offline(pcap_file, errbuf))) {
 		fprintf(stderr, "Error reading pcap file: %s\n", errbuf);
 		return 1;
+	}
+
+	if (OF(FINGERPRINT_CLASS)) {
+		const char *fp = read_file(fingerprint_file);
+		parse_json_from_file(fp);
+		free((char *)fp);
 	}
 
 	// Loop through extracting packets as long as we have any to read
 	while ((packet = pcap_next(pcap, &header)) != NULL) {
 		process_packet(packet, &header, header.ts, header.caplen);
 	}
+
+	free_fingerprints_hash();
 
 	return 0;
 }

@@ -11,6 +11,7 @@
 #include <stdlib.h>
 
 #include "genja3.h"
+#include "ja3_hashmap.h"
 #include "parser.h"
 #include "pcap_engine.h"
 
@@ -99,32 +100,45 @@ static void process_tcp(const unsigned char *packet, const struct pcap_pkthdr *h
 			if (DEBUG) {
 				printf("ClientHello %s ", ssl_version(hello_version));
 			}
+
 			if (OF(PRINT_SRC)) { // the lack of a colon here was a specific request from Coop
 				printf("[%s %hu] ", inet_ntoa(ip->ip_src), ntohs(tcp->th_sport));
 			}
+
 			if (OF(PRINT_DST) || OF(FORCE_DST)) { // colon for direct compatability with Salesforce' ja3
 				printf("[%s:%hu] ", inet_ntoa(ip->ip_dst), ntohs(tcp->th_dport));
 			}
+
 			char *sni_buffer = NULL;
 			char *alp_buffer = NULL;
 			char *raw_buffer = NULL;
+			char *hash_description = NULL;
 			char *hash = generate_ja3_hash(payload, &sni_buffer, &alp_buffer, &raw_buffer);
 			if (OF(PRINT_SNI)) {
 				printf(" [%s]", sni_buffer ? sni_buffer : "-");
 			}
+
 			if (OF(PRINT_ALP)) {
 				printf(" [%s]", alp_buffer ? alp_buffer : "-");
 			}
+
 			if (OF(PRINT_RAW)) {
 				printf(" [%s]", raw_buffer ? raw_buffer : "-");
 			} else if (OF(CREATE_BYTE_ARRAY)) {
 				printf(" {%s}", raw_buffer ? raw_buffer : "-");
 			}
 
+			if (OF(FINGERPRINT_CLASS)) {
+				hash_description = get_hash_description(hash);
+				printf(" [%s]", hash_description ? hash_description : "-");
+			}
+
+			printf("\n");
+
 			free(hash);
 			free(sni_buffer);
 			free(raw_buffer);
-			printf("\n");
+			free(hash_description);
 			break;
 		case TLS_SERVER_HELLO:
 			if (DEBUG) {

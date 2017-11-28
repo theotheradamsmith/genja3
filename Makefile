@@ -6,11 +6,11 @@ CC = gcc
 NONWALL_CFLAGS = -std=c11 -g -O2
 CFLAGS = -Wall $(NONWALL_CFLAGS)
 
-GENJA3_LIBS = -lpcap -lssl -lcrypto
 FINGER_LIBS = -lm libujson4c.a
+GENJA3_LIBS = -lpcap -lssl -lcrypto $(FINGER_LIBS)
 
-GENJA3_SRC = genja3.c parser.c pcap_engine.c util.c
 FINGER_SRC = fingerprinter.c ja3_hashmap.c util.c
+GENJA3_SRC = genja3.c ja3_hashmap.c parser.c pcap_engine.c util.c
 
 UJSON4C_OBJDIR := ujson4c/build
 
@@ -22,7 +22,7 @@ UJSON4C_OBS = $(patsubst %.c, %.o, $(UJSON4C_SRC))
 
 all: $(BIN)
 
-genja3: $(GENJA3_SRC)
+genja3: $(GENJA3_SRC) libujson4c.a
 	$(CC) $(CFLAGS) -o $@ $^ $(GENJA3_LIBS)
 
 fingerprinter: $(FINGER_SRC) libujson4c.a
