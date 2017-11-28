@@ -3,7 +3,8 @@ BIN = genja3 fingerprinter
 MKDIRP := mkdir -p
 
 CC = gcc
-CFLAGS = -Wall -std=c11 -g -O2
+NONWALL_CFLAGS = -std=c11 -g -O2
+CFLAGS = -Wall $(NONWALL_CFLAGS)
 
 GENJA3_LIBS = -lpcap -lssl -lcrypto
 FINGER_LIBS = -lm libujson4c.a
@@ -29,7 +30,7 @@ fingerprinter: $(FINGER_SRC) libujson4c.a
 
 $(UJSON4C_OBJDIR)/%.o: %.c
 	@$(MKDIRP) $(dir $@)
-	$(COMPILE.c) $< -o $@
+	$(CC) $(NONWALL_CFLAGS) -c $< -o $@
 
 libujson4c.a: $(addprefix $(UJSON4C_OBJDIR)/, $(UJSON4C_OBS))
 	ar rcs $@ $^
