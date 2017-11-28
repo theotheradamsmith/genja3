@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 /// Ridiculous functions that are in place because my code is works inside Cipafilter
 unsigned int SSL_BYTE_OFFSET(unsigned char *p);
 /// Ridiculous functions that are in place because my code is works inside Cipafilter
@@ -15,6 +17,12 @@ unsigned int two_byte_hex_to_dec(unsigned char *p);
  */
 int cf_asprintf_cat(char **old_string, char *fmt, ...);
 
-/// Function to determine if given input n is a GREASE value
+/**
+ * Function to determine if given input n is a GREASE value
+ */
 bool is_in_grease_table(unsigned int n);
 
+/**
+ * Simple function to read a file and return an allocated buffer that must be freed
+ */
+const char *read_file(const char *filename);

@@ -79,3 +79,39 @@ bool is_in_grease_table(unsigned int n) {
 	}
 }
 
+const char *read_file(const char *filename) {
+	char *buffer = NULL;
+
+	FILE *fp = fopen(filename, "r");
+
+	if (fp) {
+		if (fseek(fp, 0L, SEEK_END) == 0) {
+			const long buffsize = ftell(fp);
+			if (buffsize == -1) {
+				fclose(fp);
+				return NULL;
+			}
+
+			if (fseek(fp, 0L, SEEK_SET) != 0) {
+				fclose(fp);
+				return NULL;
+			}
+
+			buffer = calloc(1, sizeof(char) * (buffsize + 1));
+
+			const size_t new_len = fread(buffer, sizeof(char), buffsize, fp);
+			if (ferror(fp) != 0) {
+				fputs("Error reading file", stderr);
+				free(buffer);
+				fclose(fp);
+				return NULL;
+			} else {
+				buffer[new_len+1] = '\0';
+			}
+		}
+
+		fclose(fp);
+	}
+
+	return buffer;
+}

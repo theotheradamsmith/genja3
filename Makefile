@@ -1,16 +1,45 @@
-BIN = genja3
+BIN = genja3 fingerprinter
+
+MKDIRP := mkdir -p
 
 CC = gcc
 CFLAGS = -Wall -std=c11 -g -O2
-LIBS = -lpcap -lssl -lcrypto
-SRC = genja3.c parser.c pcap_engine.c util.c
+
+GENJA3_LIBS = -lpcap -lssl -lcrypto
+FINGER_LIBS = -lm libujson4c.a
+
+GENJA3_SRC = genja3.c parser.c pcap_engine.c util.c
+FINGER_SRC = fingerprinter.c ja3_hashmap.c util.c
+
+UJSON4C_OBJDIR := ujson4c/build
+
+UJSON4C_SRC = \
+	$(wildcard ujson4c/src/*.c) \
+	$(wildcard ujson4c/3rdparty/*.c)
+
+UJSON4C_OBS = $(patsubst %.c, %.o, $(UJSON4C_SRC))
 
 all: $(BIN)
 
-genja3: $(SRC)
-	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+genja3: $(GENJA3_SRC)
+	$(CC) $(CFLAGS) -o $@ $^ $(GENJA3_LIBS)
+
+fingerprinter: $(FINGER_SRC) libujson4c.a
+	$(CC) $(CFLAGS) -o $@ $^ $(FINGER_LIBS)
+
+$(UJSON4C_OBJDIR)/%.o: %.c
+	@$(MKDIRP) $(dir $@)
+	$(COMPILE.c) $< -o $@
+
+libujson4c.a: $(addprefix $(UJSON4C_OBJDIR)/, $(UJSON4C_OBS))
+	ar rcs $@ $^
 
 clean:
 	rm -f genja3
+	rm -f fingerprinter
+	rm -rf ${CURDIR}/$(UJSON4C_OBJDIR)
 
-.PHONY: clean
+realclean: clean
+	rm libujson4c.a
+
+.PHONY: directories clean libujson4c.a
